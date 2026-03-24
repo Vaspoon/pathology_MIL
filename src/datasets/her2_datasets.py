@@ -1,6 +1,7 @@
 import torch
 from torch.utils.data import Dataset
 import numpy as np
+import h5py
 
 class HER2Dataset(Dataset):
     def __init__(self, dataframe, embeddings_dir):
@@ -13,8 +14,8 @@ class HER2Dataset(Dataset):
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
 
-        hes = np.load(f"{self.embeddings_dir}/{row.hes_id}.npy")
-        ihc = np.load(f"{self.embeddings_dir}/{row.ihc_id}.npy")
+        hes = np.load(f"{self.embeddings_dir}/{row.hes_id}.h5")
+        ihc = np.load(f"{self.embeddings_dir}/{row.ihc_id}.h5")
 
         hes = torch.tensor(hes, dtype=torch.float32)
         ihc = torch.tensor(ihc, dtype=torch.float32)

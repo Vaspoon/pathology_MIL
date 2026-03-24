@@ -1,0 +1,2 @@
+csv: data/splits/train.csv
+embeddings_dir: data/HER2MATCH_224_UNI2_embeds/

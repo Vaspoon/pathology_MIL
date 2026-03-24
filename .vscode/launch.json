@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug MIL (Hydra)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/main.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}/src",
+      "args": [
+        "training.epochs=5",
+        "training.device=cpu"
+      ],
+      "env": {
+        "HYDRA_FULL_ERROR": "1"
+      }
+    }
+  ]
+}

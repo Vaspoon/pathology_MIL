@@ -1,0 +1,4 @@
+batch_size: 1
+lr: 1e-4
+epochs: 50
+device: cuda

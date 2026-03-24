@@ -1,0 +1,25 @@
+defaults:
+  - _self_
+
+experiment:
+  name: mil_hes_max
+
+data:
+  train_csv: data/splits/train.csv
+  val_csv: data/splits/val.csv
+  embeddings_dir: data/HER2MATCH_224_UNI2_embeds\HE/
+  dataset_key: embeddings
+
+model:
+  input_dim: 1024   # adapter à UNI2
+  hidden_dim: 256
+
+training:
+  batch_size: 1
+  lr: 1e-4
+  epochs: 50
+  device: cuda
+
+hydra:
+  run:
+    dir: outputs/${experiment.name}/${now:%Y-%m-%d_%H-%M-%S}
