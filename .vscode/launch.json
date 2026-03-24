@@ -3,6 +3,7 @@
   "configurations": [
     {
       "name": "Debug MIL (Hydra)",
+      "python": "${workspaceFolder}/venv/Scripts/python.exe",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/src/main.py",
