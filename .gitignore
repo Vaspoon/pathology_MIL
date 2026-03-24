@@ -1,3 +1,6 @@
 venv/
-data/HER2MATCH_224_UNI2_embeds/
+data/HER2MATCH_GIGAPATH_embeds/
 data/splits/
+src/outputs/
+src/multirun/
+multirun/
