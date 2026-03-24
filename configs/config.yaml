@@ -5,21 +5,23 @@ experiment:
   name: mil_hes_max
 
 data:
-  train_csv: data/splits/train.csv
-  val_csv: data/splits/val.csv
-  embeddings_dir: data/HER2MATCH_224_UNI2_embeds\HE/
+  train_csv: ../data/splits/train.csv
+  val_csv: ../data/splits/val.csv
+  embeddings_dir_train: ../data/HER2MATCH_GIGAPATH_embeds/HE/train
+  embeddings_dir_val: ../data/HER2MATCH_GIGAPATH_embeds/HE/val
   dataset_key: embeddings
 
 model:
-  input_dim: 1024   # adapter à UNI2
+  input_dim: 1536   # adapter aux embeddings
   hidden_dim: 256
 
 training:
-  batch_size: 1
+  batch_size: 2
   lr: 1e-4
   epochs: 50
   device: cuda
+  save_every : 5
 
 hydra:
   run:
-    dir: outputs/${experiment.name}/${now:%Y-%m-%d_%H-%M-%S}
+    dir: outputs/${experiment.name}_/${now:%Y-%m-%d_%H-%M-%S}

@@ -13,13 +13,13 @@ class HER2Dataset(Dataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-
-        hes = np.load(f"{self.embeddings_dir}/{row.hes_id}.h5")
-        ihc = np.load(f"{self.embeddings_dir}/{row.ihc_id}.h5")
+        with h5py.File(f"{self.embeddings_dir}/{row.slide_id}.h5", "r") as f:
+            hes = f["features"][:]
+        # ihc = np.load(f"{self.embeddings_dir}/{row.ihc_id}.h5")
 
         hes = torch.tensor(hes, dtype=torch.float32)
-        ihc = torch.tensor(ihc, dtype=torch.float32)
+        # ihc = torch.tensor(ihc, dtype=torch.float32)
 
         label = torch.tensor(row.label, dtype=torch.float32)
 
-        return hes, ihc, label
+        return hes, label

@@ -80,6 +80,7 @@ class Trainer:
             self.optimizer.zero_grad()
 
             pred = self.model(hes)
+            pred = pred.unsqueeze(0)
 
             loss = F.binary_cross_entropy_with_logits(pred, y)
             loss.backward()
@@ -108,7 +109,7 @@ class Trainer:
                 y = y.to(self.device)
 
                 pred = self.model(hes)
-
+                pred = pred.unsqueeze(0)
                 loss = F.binary_cross_entropy_with_logits(pred, y)
                 total_loss += loss.item()
 
