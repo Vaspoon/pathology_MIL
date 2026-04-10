@@ -75,12 +75,11 @@ class Trainer:
 
         for step, (hes, y) in enumerate(loader):
             hes = hes[0].to(self.device)
-            y = y.to(self.device)
+            y = y.to(self.device).squeeze(0)
 
             self.optimizer.zero_grad()
 
             pred = self.model(hes)
-            pred = pred.unsqueeze(0)
 
             loss = F.binary_cross_entropy_with_logits(pred, y)
             loss.backward()

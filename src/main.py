@@ -31,8 +31,8 @@ def main(cfg: DictConfig):
 
     train_dataset = HER2Dataset(train_df, embeddings_dir=cfg.data.embeddings_dir_train)
     val_dataset = HER2Dataset(val_df, embeddings_dir=cfg.data.embeddings_dir_val)
-    train_loader = DataLoader(train_dataset, shuffle=True)
-    val_loader = DataLoader(val_dataset, shuffle=False)
+    train_loader = DataLoader(train_dataset,batch_size=cfg.training.batch_size, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=cfg.training.batch_size, shuffle=False)
 
     # model
     model = MILMaxPooling(
@@ -47,7 +47,6 @@ def main(cfg: DictConfig):
 
     trainer = Trainer(model, optimizer, device, writer)
 
-    # training loop
 # training loop
     for epoch in trange(cfg.training.epochs, desc="Training Epochs"):
         train_loss = trainer.train_epoch(train_loader, epoch)

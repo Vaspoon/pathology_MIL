@@ -14,7 +14,13 @@ class HER2Dataset(Dataset):
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
         with h5py.File(f"{self.embeddings_dir}/{row.slide_id}.h5", "r") as f:
-            hes = f["features"][:]
+            if "features" in f:
+                hes = f["features"][:]
+            elif "embeddings" in f:
+                hes = f["embeddings"][:]
+            else:
+                raise KeyError("Neither 'features' nor 'embeddings' found in file")
+
         # ihc = np.load(f"{self.embeddings_dir}/{row.ihc_id}.h5")
 
         hes = torch.tensor(hes, dtype=torch.float32)
