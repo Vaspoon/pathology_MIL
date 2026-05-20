@@ -1,0 +1,11 @@
+# configs/model/transmil.yaml
+# TransMIL — Transformer-based Correlated MIL (Shao et al., NeurIPS 2021)
+# https://arxiv.org/abs/2106.00908
+
+name: transmil
+input_dim:     1536    # UNI2 / GigaPath patch embeddings
+hidden_dim:    512     # internal transformer dim (must be divisible by num_heads)
+n_classes:     2
+num_heads:     8
+num_landmarks: 256     # Nystrom landmarks; falls back to full attention when N ≤ this
+dropout:       0.1

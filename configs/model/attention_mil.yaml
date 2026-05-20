@@ -1,3 +1,9 @@
-name: mil_max
-input_dim: 1024
+# configs/model/attention_mil.yaml
+# AttentionMIL_Papagoras (attention simple tanh, sans gate)
+# FIX : input_dim corrigé 1024 → 1536 pour UNI2
+
+name: attention_mil
+input_dim: 1536       # était 1024 — corrigé pour UNI2
 hidden_dim: 256
+n_classes: 2
+dropout: 0.0

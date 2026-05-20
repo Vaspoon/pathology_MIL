@@ -1,0 +1,10 @@
+# configs/model/multimodal_gated.yaml
+# MultiModalMILGated — fusion HES+IHC par cross-attention
+# Inférence HES seule : passer ihc=None dans le forward
+
+name: multimodal_gated
+input_dim: 1536
+hidden_dim: 256
+n_classes: 2
+n_heads: 4            # doit diviser hidden_dim
+dropout: 0.25

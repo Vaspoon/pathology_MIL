@@ -1,0 +1,3 @@
+name: mil_mean
+input_dim: 1536
+hidden_dim: 256

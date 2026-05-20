@@ -1,0 +1,10 @@
+# configs/data/default.yaml
+# Paramètres data par défaut (le dossier configs/data/ était vide)
+
+train_csv:              ../../data/splits/train.csv
+val_csv:                ../data/splits/val.csv
+embeddings_dir_train:   ../data/HER2MATCH_224_UNI2_embeds/HE/train
+embeddings_dir_val:     ../data/HER2MATCH_224_UNI2_embeds/HE/val
+embeddings_dir_ihc_train: ../data/HER2MATCH_224_UNI2_embeds/IHC/train
+embeddings_dir_ihc_val:   ../data/HER2MATCH_224_UNI2_embeds/IHC/val
+dataset_key: embeddings

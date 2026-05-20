@@ -4,3 +4,6 @@ data/splits/
 src/outputs/
 src/multirun/
 multirun/
+outputs/
+data/HER2MATCH_224_UNI2_embeds
+*.pyc

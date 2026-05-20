@@ -1,0 +1,9 @@
+# configs/model/abmil.yaml
+# ABMIL avec Gated Attention (Ilse et al., 2018)
+# Différence avec attention_mil : gate sigmoid en plus du tanh
+
+name: abmil
+input_dim: 1536       # UNI2 / GigaPath
+hidden_dim: 256
+n_classes: 2
+dropout: 0.25

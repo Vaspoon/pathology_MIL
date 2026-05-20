@@ -1,27 +1,39 @@
 defaults:
   - _self_
+  - model: abmil                    # mil_max | mil_mean | attention_mil | abmil | transmil | multimodal_gated
 
 experiment:
-  name: mil_hes_max
+  name: abmil_chu_he
 
 data:
-  train_csv: ../data/splits/train.csv
-  val_csv: ../data/splits/val.csv
-  embeddings_dir_train: ../data/HER2MATCH_GIGAPATH_embeds/HE/train
-  embeddings_dir_val: ../data/HER2MATCH_GIGAPATH_embeds/HE/val
+  train_csv:              data/splits_chu/train.csv
+  val_csv:                data/splits_chu/val.csv
+  embeddings_dir_train:   data/CHU_UNI2_embeds/HE/train
+  embeddings_dir_val:     data/CHU_UNI2_embeds/HE/val
+  # Only used if model.name = multimodal or multimodal_gated
+  embeddings_dir_ihc_train: data/CHU_UNI2_embeds/HE/train
+  embeddings_dir_ihc_val:   data/CHU_UNI2_embeds/HE/val
   dataset_key: embeddings
 
-model:
-  input_dim: 1536   # adapter aux embeddings
-  hidden_dim: 256
-
 training:
-  batch_size: 2
+  batch_size: 1
   lr: 1e-4
-  epochs: 50
+  epochs: 25
   device: cuda
-  save_every : 5
+  save_every: 5
+  early_stopping_patience: 10       # utilisé par TrainerABMIL uniquement
+  monitor: val_loss                  # "val_loss" | "val_auc"
+
+heatmap:
+  patch_size: 256
+  downsample: 4
+  colormap: jet
+  alpha: 0.5
+  top_k: 10
 
 hydra:
   run:
-    dir: outputs/${experiment.name}_/${now:%Y-%m-%d_%H-%M-%S}
+    dir: outputs/${experiment.name}_${now:%Y-%m-%d_%H-%M-%S}
+  sweep:
+    dir: multirun/${experiment.name}_${now:%Y-%m-%d_%H-%M-%S}
+    subdir: ${hydra.job.num}

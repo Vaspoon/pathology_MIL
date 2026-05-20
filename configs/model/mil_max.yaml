@@ -1,0 +1,6 @@
+# configs/model/mil_max.yaml
+# MIL Max Pooling — modèle original
+
+name: mil_max
+input_dim: 1536
+hidden_dim: 256

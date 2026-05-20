@@ -1,21 +1,31 @@
 {
   "version": "0.2.0",
   "configurations": [
+
     {
-      "name": "Debug MIL (Hydra)",
+    "name": "Debug abmil main.py",
+    "type": "debugpy",
+    "request": "launch",
+    "program": "${workspaceFolder}/src/main.py",
+    "console": "integratedTerminal",
+    "args": [
+      "model=transmil",
+      "training.lr=1e-4"
+     ]
+    },
+    {
+      "name": "Preprocess Patches",
       "python": "${workspaceFolder}/venv/Scripts/python.exe",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/src/main.py",
+      "program": "${workspaceFolder}/preprocessing/preprocessing.py",
       "console": "integratedTerminal",
-      "cwd": "${workspaceFolder}/src",
+      "cwd": "${workspaceFolder}",
       "args": [
-        "training.epochs=5",
-        "training.device=cpu"
-      ],
-      "env": {
-        "HYDRA_FULL_ERROR": "1"
+        "--config",
+        "${workspaceFolder}/configs/preprocessing/preprocess_patches.yaml"
+      ]
       }
-    }
+
   ]
 }

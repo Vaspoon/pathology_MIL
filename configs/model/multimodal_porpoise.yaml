@@ -1,0 +1,12 @@
+# configs/model/multimodal_porpoise.yaml
+# Late-fusion multimodal MIL (PORPOISE-style, Chen et al. ICCV 2021)
+# Two independent ABMIL branches (HES + IHC) fused by concatenation.
+#
+# NOTE: requires a CSV with columns [slide_id, ihc_id, label]
+# and two embedding directories (embeddings_dir_train + embeddings_dir_ihc_train).
+
+name: multimodal_porpoise
+input_dim:  1536    # UNI2 / GigaPath patch embeddings (same for both modalities)
+hidden_dim: 256
+n_classes:  2
+dropout:    0.25
