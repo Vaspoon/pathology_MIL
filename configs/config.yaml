@@ -1,18 +1,18 @@
 defaults:
   - _self_
-  - model: abmil                    # mil_max | mil_mean | attention_mil | abmil | transmil | multimodal_gated
+  - model: multimodal_gated                   # mil_max | mil_mean | attention_mil | abmil | transmil | multimodal_gated | multimodal_porpoise
 
 experiment:
-  name: abmil_chu_he
+  name: multimodal_gated_chu_balanced
 
 data:
-  train_csv:              data/splits_chu/train.csv
-  val_csv:                data/splits_chu/val.csv
-  embeddings_dir_train:   data/CHU_UNI2_embeds/HE/train
-  embeddings_dir_val:     data/CHU_UNI2_embeds/HE/val
-  # Only used if model.name = multimodal or multimodal_gated
-  embeddings_dir_ihc_train: data/CHU_UNI2_embeds/HE/train
-  embeddings_dir_ihc_val:   data/CHU_UNI2_embeds/HE/val
+  train_csv:              data/splits_chu_balanced/train.csv
+  val_csv:                data/splits_chu_balanced/val.csv
+  embeddings_dir_train:   data/CHU_UNI2_embeds_balanced/HE/train/
+  embeddings_dir_val:     data/CHU_UNI2_embeds_balanced/HE/val/
+  # Used when model.name = multimodal_porpoise | multimodal_gated
+  embeddings_dir_ihc_train: data/CHU_UNI2_embeds_balanced/IHC/train/
+  embeddings_dir_ihc_val:   data/CHU_UNI2_embeds_balanced/IHC/val/
   dataset_key: embeddings
 
 training:
@@ -23,7 +23,6 @@ training:
   save_every: 5
   early_stopping_patience: 10       # utilisé par TrainerABMIL uniquement
   monitor: val_loss                  # "val_loss" | "val_auc"
-
 heatmap:
   patch_size: 256
   downsample: 4

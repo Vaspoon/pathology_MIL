@@ -1,0 +1,23 @@
+# configs/sweep/multimodal_gated_sweep.yaml
+#
+# Sweep Hydra pour MultiModalMILGated — paramètre n_heads tunable.
+#
+# Contrainte : n_heads doit diviser hidden_dim (default 256).
+# Valeurs valides : 1, 2, 4, 8, 16 (256 % n_heads == 0 pour toutes).
+#
+# Lancement :
+#   python src/main.py --multirun \
+#       --config-dir configs/sweep \
+#       --config-name multimodal_gated_sweep
+#
+# Ou via override direct sans ce fichier :
+#   python src/main.py --multirun model.n_heads=1,2,4,8
+
+defaults:
+  - override /model: multimodal_gated
+
+hydra:
+  mode: MULTIRUN
+  sweeper:
+    params:
+      model.n_heads: choice(1, 2, 4, 8)

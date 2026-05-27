@@ -9,7 +9,7 @@
     "program": "${workspaceFolder}/src/main.py",
     "console": "integratedTerminal",
     "args": [
-      "model=transmil",
+      "model=mil_max",
       "training.lr=1e-4"
      ]
     },
