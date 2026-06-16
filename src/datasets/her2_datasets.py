@@ -13,14 +13,29 @@ import h5py
 from pathlib import Path
 
 class H5Dataset(Dataset):
+    """
+    Args:
+        embeddings_dir: répertoire des embeddings .h5, ou liste de répertoires
+            (utilisé lorsqu'on fusionne plusieurs splits, ex: train+val pour CV).
+            Le premier répertoire contenant le fichier est utilisé.
+    """
+
     def __init__(self, dataframe, embeddings_dir):
-        self.embeddings_dir = embeddings_dir
+        if isinstance(embeddings_dir, (str, Path)):
+            self.embeddings_dirs = [embeddings_dir]
+        else:
+            self.embeddings_dirs = list(embeddings_dir)
         self.df = self._filter_existing(dataframe)
 
+    def _find_path(self, slide_id):
+        for d in self.embeddings_dirs:
+            p = Path(d, f"{slide_id}.h5")
+            if p.exists():
+                return p
+        return None
+
     def _filter_existing(self, dataframe):
-        mask = dataframe["slide_id"].apply(
-            lambda sid: Path(self.embeddings_dir, f"{sid}.h5").exists()
-        )
+        mask = dataframe["slide_id"].apply(lambda sid: self._find_path(sid) is not None)
         missing_ids = dataframe.loc[~mask, "slide_id"].tolist()
         if missing_ids:
             print(f"[H5Dataset] {len(missing_ids)} file(s) .h5 cannot be found - ignored :")
@@ -33,7 +48,7 @@ class H5Dataset(Dataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        with h5py.File(Path(self.embeddings_dir, f"{row.slide_id}.h5"), "r") as f:
+        with h5py.File(self._find_path(row.slide_id), "r") as f:
             if "features" in f:
                 hes = f["features"][:]
             elif "embeddings" in f:
@@ -111,19 +126,31 @@ class DatasetMultiModal(Dataset):
 
     Args:
         dataframe        : DataFrame avec colonnes [slide_id, ihc_id, label]
-        embeddings_dir_hes : répertoire des embeddings HES (.h5)
-        embeddings_dir_ihc : répertoire des embeddings IHC (.h5)
+        embeddings_dir_hes : répertoire des embeddings HES (.h5), ou liste de répertoires
+        embeddings_dir_ihc : répertoire des embeddings IHC (.h5), ou liste de répertoires
     """
 
     def __init__(self, dataframe, embeddings_dir_hes, embeddings_dir_ihc):
-        self.df                 = dataframe
-        self.embeddings_dir_hes = embeddings_dir_hes
-        self.embeddings_dir_ihc = embeddings_dir_ihc
+        self.df = dataframe.reset_index(drop=True)
+        self.embeddings_dirs_hes = (
+            [embeddings_dir_hes] if isinstance(embeddings_dir_hes, (str, Path)) else list(embeddings_dir_hes)
+        )
+        self.embeddings_dirs_ihc = (
+            [embeddings_dir_ihc] if isinstance(embeddings_dir_ihc, (str, Path)) else list(embeddings_dir_ihc)
+        )
 
     def __len__(self):
         return len(self.df)
 
-    def _load_h5(self, path: str) -> torch.Tensor:
+    @staticmethod
+    def _find_path(dirs, file_id):
+        for d in dirs:
+            p = Path(d, f"{file_id}.h5")
+            if p.exists():
+                return p
+        raise FileNotFoundError(f"{file_id}.h5 introuvable dans {dirs}")
+
+    def _load_h5(self, path) -> torch.Tensor:
         with h5py.File(path, "r") as f:
             if "features" in f:
                 data = f["features"][:]
@@ -136,8 +163,8 @@ class DatasetMultiModal(Dataset):
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
 
-        hes   = self._load_h5(f"{self.embeddings_dir_hes}/{row.slide_id}.h5")
-        ihc   = self._load_h5(f"{self.embeddings_dir_ihc}/{row.ihc_id}.h5")
+        hes   = self._load_h5(self._find_path(self.embeddings_dirs_hes, row.slide_id))
+        ihc   = self._load_h5(self._find_path(self.embeddings_dirs_ihc, row.ihc_id))
         label = torch.tensor(row.label, dtype=torch.float32)
 
         return hes, ihc, label

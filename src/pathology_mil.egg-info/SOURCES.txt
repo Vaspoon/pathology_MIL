@@ -1,0 +1,14 @@
+README.md
+pyproject.toml
+src/datasets/her2_datasets.py
+src/models/abmil.py
+src/models/attention_mil.py
+src/models/mil_max_pooling.py
+src/models/multimodal_mil.py
+src/pathology_mil.egg-info/PKG-INFO
+src/pathology_mil.egg-info/SOURCES.txt
+src/pathology_mil.egg-info/dependency_links.txt
+src/pathology_mil.egg-info/top_level.txt
+src/training/trainer.py
+src/utils/config.py
+src/utils/heatmap.py

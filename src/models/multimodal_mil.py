@@ -129,13 +129,14 @@ class MultiModalMILGated(nn.Module):
         self.hes_proj = nn.Sequential(nn.Linear(input_dim, hidden_dim), nn.ReLU())
         self.ihc_proj = nn.Sequential(nn.Linear(input_dim, hidden_dim), nn.ReLU())
 
-        # Tête de classification fusionnée
-        self.classifier = nn.Sequential(
+        # Fusion des deux embeddings enrichis -> hidden_dim
+        self.fusion = nn.Sequential(
             nn.Linear(2 * hidden_dim, hidden_dim),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(hidden_dim, n_classes),
         )
+        # Tête de classification harmonisée
+        self.classifier = nn.Linear(hidden_dim, n_classes)
 
         self.hidden_dim = hidden_dim
 
@@ -172,7 +173,8 @@ class MultiModalMILGated(nn.Module):
         z_ihc_enriched = self.ihc_reads_hes(z_ihc, h_hes)  # IHC lit HES
 
         # ── Fusion + classification ───────────────────────────
-        fused  = torch.cat([z_hes_enriched, z_ihc_enriched], dim=-1)  # [1, 2*hidden]
+        cat    = torch.cat([z_hes_enriched, z_ihc_enriched], dim=-1)  # [1, 2*hidden]
+        fused  = self.fusion(cat)                                      # [1, hidden]
         logits = self.classifier(fused).squeeze(0)                     # [n_classes]
 
         attn = {

@@ -1,9 +1,9 @@
 defaults:
   - _self_
-  - model: multimodal_gated                   # mil_max | mil_mean | attention_mil | abmil | transmil | multimodal_gated | multimodal_porpoise
+  - model: mil_mean                  # mil_max | mil_mean | attention_mil | abmil | transmil | clam_sb | clam_mb | multimodal_gated | multimodal_porpoise
 
 experiment:
-  name: multimodal_gated_chu_balanced
+  name: he_mono_mil_mean_chu_balanced
 
 data:
   train_csv:              data/splits_chu_balanced/train.csv
@@ -14,6 +14,11 @@ data:
   embeddings_dir_ihc_train: data/CHU_UNI2_embeds_balanced/IHC/train/
   embeddings_dir_ihc_val:   data/CHU_UNI2_embeds_balanced/IHC/val/
   dataset_key: embeddings
+  # Optionnel — utilisé par train_cv.py comme jeu de test indépendant,
+  # évalué pour chaque (seed, fold) en plus du fold de validation.
+  test_csv:                 "data/splits_chu/test_he_unbalanced.csv"
+  embeddings_dir_test:      "data/CHU_UNI2_embeds/HE/"
+  embeddings_dir_ihc_test:   "data/CHU_UNI2_embeds/HE/"
 
 training:
   batch_size: 1
@@ -21,8 +26,22 @@ training:
   epochs: 25
   device: cuda
   save_every: 5
-  early_stopping_patience: 10       # utilisé par TrainerABMIL uniquement
+  early_stopping: false               # active/désactive l'early stopping (TrainerABMIL et famille)
+  early_stopping_patience: 10        # utilisé par TrainerABMIL uniquement
   monitor: val_loss                  # "val_loss" | "val_auc"
+  bag_weight: 0.7                    # utilisé par TrainerCLAM (clam_sb / clam_mb) uniquement
+
+# Utilisé par train_cv.py (cross-validation multi-seeds)
+cv:
+  method: kfold        # "kfold" | "loo" (Leave-One-Out)
+  k: 4                  # nombre de folds (ignoré si method == "loo")
+  n_seeds: 6            # nombre de seeds testées
+  seed_start: 0         # première seed (seeds = seed_start .. seed_start + n_seeds - 1)
+  # seeds: [0, 1, 2, 3, 4]  # si fourni, remplace n_seeds/seed_start
+  save_checkpoints: false   # sauvegarder les .pt de chaque fold (volumineux pour LOO)
+  save_best_per_seed: true  # sauvegarder un seul modèle (le meilleur, toutes folds confondues) par seed
+  results_dir: outputs/cv_results   # chemin stable lu par les notebooks d'évaluation
+
 heatmap:
   patch_size: 256
   downsample: 4

@@ -6,9 +6,11 @@ TrainerMultiModal
 TrainerABMIL : metrics AUC, early stopping, sauvegarde best checkpoint.
 """
 
+import copy
 import os
 import torch
 import torch.nn.functional as F
+from tqdm import trange
 
 
 class Trainer:
@@ -29,8 +31,8 @@ class Trainer:
             y   = y.to(self.device).squeeze(0)
 
             self.optimizer.zero_grad()
-            pred = self.model(hes)
-            loss = F.binary_cross_entropy_with_logits(pred, y)
+            logits = self.model(hes)  # [n_classes]
+            loss = F.cross_entropy(logits.unsqueeze(0), y.long().unsqueeze(0))
             loss.backward()
             self.optimizer.step()
 
@@ -51,11 +53,10 @@ class Trainer:
 
         with torch.no_grad():
             for hes, y in loader:
-                hes  = hes[0].to(self.device)
-                y    = y.to(self.device)
-                pred = self.model(hes)
-                pred = pred.unsqueeze(0)
-                loss = F.binary_cross_entropy_with_logits(pred, y)
+                hes    = hes[0].to(self.device)
+                y      = y.to(self.device).squeeze(0)
+                logits = self.model(hes)  # [n_classes]
+                loss   = F.cross_entropy(logits.unsqueeze(0), y.long().unsqueeze(0))
                 total_loss += loss.item()
 
         avg_loss = total_loss / len(loader)
@@ -171,6 +172,7 @@ class TrainerABMIL:
         writer=None,
         early_stopping_patience: int  = 10,
         monitor:                 str  = "val_loss",   # "val_loss" | "val_auc"
+        early_stopping:          bool = True,         # désactive l'early stopping si False
     ):
         self.model     = model
         self.optimizer = optimizer
@@ -179,10 +181,13 @@ class TrainerABMIL:
         self.monitor   = monitor
 
         mode = "min" if monitor == "val_loss" else "max"
-        self.early_stopping = EarlyStopping(patience=early_stopping_patience, mode=mode)
+        self.early_stopping_enabled = early_stopping
+        self.early_stopper = EarlyStopping(patience=early_stopping_patience, mode=mode)
 
-        self.best_metric = float("inf") if mode == "min" else float("-inf")
-        self.mode        = mode
+        self.best_metric    = float("inf") if mode == "min" else float("-inf")
+        self.mode           = mode
+        self.best_state_dict = None
+        self.best_epoch      = None
 
     def _is_better(self, metric: float) -> bool:
         if self.mode == "min":
@@ -280,9 +285,15 @@ class TrainerABMIL:
         }, path)
         return path
 
-    def fit(self, train_loader, val_loader, cfg, run_dir: str) -> dict:
+    def fit(self, train_loader, val_loader, cfg, run_dir: str, save_checkpoints: bool = True, desc: str = "epochs") -> dict:
         """
         Boucle d'entraînement complète avec early stopping et checkpointing.
+
+        Args:
+            save_checkpoints: si False, n'écrit aucun fichier .pt sur disque
+                (utile pour les boucles cross-validation / multi-seeds).
+            desc: préfixe affiché sur la barre de progression tqdm (ex: nom du
+                fold/seed en cours).
 
         Retourne l'historique des métriques.
         Usage :
@@ -291,7 +302,8 @@ class TrainerABMIL:
         """
         history = {"train_loss": [], "val_loss": [], "val_auc": [], "val_acc": []}
 
-        for epoch in range(cfg.training.epochs):
+        pbar = trange(cfg.training.epochs, desc=desc, leave=False)
+        for epoch in pbar:
             train_loss = self.train_epoch(train_loader, epoch)
             val_metrics = self.eval_epoch(val_loader, epoch)
 
@@ -301,35 +313,38 @@ class TrainerABMIL:
 
             monitor_val = val_metrics[self.monitor]
 
-            print(
-                f"Epoch {epoch:03d} | "
-                f"train_loss={train_loss:.4f} | "
-                f"val_loss={val_metrics['val_loss']:.4f} | "
-                f"val_auc={val_metrics['val_auc']:.4f} | "
-                f"val_acc={val_metrics['val_acc']:.4f}"
+            pbar.set_postfix(
+                train_loss=f"{train_loss:.4f}",
+                val_loss=f"{val_metrics['val_loss']:.4f}",
+                val_auc=f"{val_metrics['val_auc']:.4f}",
+                val_acc=f"{val_metrics['val_acc']:.4f}",
             )
 
             # Sauvegarde best model
             if self._is_better(monitor_val):
-                self.best_metric = monitor_val
-                path = self.save_checkpoint(run_dir, "best", epoch, val_metrics)
-                print(f"  ✓ Best model sauvegardé → {path}  ({self.monitor}={monitor_val:.4f})")
+                self.best_metric     = monitor_val
+                self.best_epoch      = epoch
+                self.best_state_dict = copy.deepcopy(self.model.state_dict())
+                if save_checkpoints:
+                    path = self.save_checkpoint(run_dir, "best", epoch, val_metrics)
+                    pbar.write(f"  Best model sauvegardé -> {path}  ({self.monitor}={monitor_val:.4f})")
 
             # Checkpoint périodique
-            if (epoch + 1) % cfg.training.get("save_every", 5) == 0:
+            if save_checkpoints and (epoch + 1) % cfg.training.get("save_every", 5) == 0:
                 self.save_checkpoint(run_dir, f"epoch_{epoch+1}", epoch, val_metrics)
 
             # Early stopping
-            if self.early_stopping.step(monitor_val):
-                print(
+            if self.early_stopping_enabled and self.early_stopper.step(monitor_val):
+                pbar.write(
                     f"Early stopping déclenché à l'epoch {epoch} "
-                    f"(patience={self.early_stopping.patience}, "
-                    f"best {self.monitor}={self.early_stopping.best:.4f})"
+                    f"(patience={self.early_stopper.patience}, "
+                    f"best {self.monitor}={self.early_stopper.best:.4f})"
                 )
                 break
 
         # Checkpoint final
-        self.save_checkpoint(run_dir, "last", epoch, val_metrics)
+        if save_checkpoints:
+            self.save_checkpoint(run_dir, "last", epoch, val_metrics)
         return history
 
 

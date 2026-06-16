@@ -54,13 +54,14 @@ class MultiModalMILPorpoise(nn.Module):
         self.hes_attention = GatedAttention(input_dim, hidden_dim, dropout)
         self.ihc_attention = GatedAttention(input_dim, hidden_dim, dropout)
 
-        # Shared classifier operating on the concatenated bag embeddings
-        self.classifier = nn.Sequential(
+        # Fusion of the two bag embeddings -> hidden_dim
+        self.fusion = nn.Sequential(
             nn.Linear(2 * hidden_dim, hidden_dim),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(hidden_dim, n_classes),
         )
+        # Harmonized classification head
+        self.classifier = nn.Linear(hidden_dim, n_classes)
 
     # ------------------------------------------------------------------
     def forward(
@@ -88,7 +89,8 @@ class MultiModalMILPorpoise(nn.Module):
             ihc_attn_w = None
 
         # ── Late fusion: concatenate bag-level embeddings ────────────────
-        fused  = torch.cat([z_hes, z_ihc], dim=-1)    # [1, 2*hidden_dim]
+        cat    = torch.cat([z_hes, z_ihc], dim=-1)    # [1, 2*hidden_dim]
+        fused  = self.fusion(cat)                      # [1, hidden_dim]
         logits = self.classifier(fused).squeeze(0)     # [n_classes]
 
         attn = {

@@ -1,4 +1,3 @@
-import inspect
 import os
 
 import hydra
@@ -10,47 +9,10 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import trange
 
 from datasets.her2_datasets import H5Dataset, DatasetMultiModal
-from models.abmil import ABMIL
-from models.attention_mil import AttentionMIL_Papagoras
-from models.mil_max_pooling import MILMaxPooling
-from models.mil_mean_pooling import MILMeanPooling
-from models.multimodal_porpoise import MultiModalMILPorpoise
-from models.multimodal_mil import MultiModalMILGated
-from models.transmil import TransMIL
-from training.trainer import Trainer, TrainerABMIL, TrainerMultiModalABMIL
-
-# ---------------------------------------------------------------------------
-# Registry: model name → {cls, trainer, multimodal}
-#
-#   multimodal=False  →  H5Dataset (hes only),       forward(hes)
-#   multimodal=True   →  DatasetMultiModal (hes+ihc), forward(hes, ihc)
-#
-# Trainer classes:
-#   Trainer                  — returns scalar logit (mil_max / mil_mean)
-#   TrainerABMIL             — returns (logits, attn), full metrics
-#   TrainerMultiModalABMIL   — returns (logits, attn), full metrics, multimodal batches
-# ---------------------------------------------------------------------------
-MODEL_REGISTRY = {
-    "mil_max":              {"cls": MILMaxPooling,          "trainer": Trainer,                "multimodal": False},
-    "mil_mean":             {"cls": MILMeanPooling,         "trainer": Trainer,                "multimodal": False},
-    "attention_mil":        {"cls": AttentionMIL_Papagoras, "trainer": TrainerABMIL,           "multimodal": False},
-    "abmil":                {"cls": ABMIL,                  "trainer": TrainerABMIL,           "multimodal": False},
-    "transmil":             {"cls": TransMIL,               "trainer": TrainerABMIL,           "multimodal": False},
-    "multimodal_porpoise":  {"cls": MultiModalMILPorpoise,  "trainer": TrainerMultiModalABMIL, "multimodal": True},
-    "multimodal_gated":     {"cls": MultiModalMILGated,     "trainer": TrainerMultiModalABMIL, "multimodal": True},
-}
-
-
-def _build_model(cfg_model, device):
-    """Instantiate model from registry, passing only params accepted by __init__."""
-    name = cfg_model.name
-    if name not in MODEL_REGISTRY:
-        raise ValueError(f"Unknown model '{name}'. Available: {list(MODEL_REGISTRY)}")
-    entry = MODEL_REGISTRY[name]
-    valid  = set(inspect.signature(entry["cls"].__init__).parameters) - {"self"}
-    kwargs = {k: v for k, v in OmegaConf.to_container(cfg_model).items() if k in valid}
-    return entry["cls"](**kwargs).to(device), entry["trainer"], entry["multimodal"]
-
+from training.trainer import TrainerABMIL, TrainerMultiModalABMIL
+from training.trainer_clam import TrainerCLAM
+from training.trainer_contrastive import TrainerContrastiveMultiModalABMIL
+from utils.build import build_model as _build_model, build_trainer as _build_trainer
 
 # ---------------------------------------------------------------------------
 
@@ -91,12 +53,8 @@ def main(cfg: DictConfig):
     # ── Training ─────────────────────────────────────────────────────────────
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.training.lr)
 
-    if TrainerClass in (TrainerABMIL, TrainerMultiModalABMIL):
-        trainer = TrainerClass(
-            model, optimizer, device, writer,
-            early_stopping_patience=cfg.training.early_stopping_patience,
-            monitor=cfg.training.monitor,
-        )
+    if TrainerClass in (TrainerABMIL, TrainerCLAM, TrainerMultiModalABMIL, TrainerContrastiveMultiModalABMIL):
+        trainer = _build_trainer(TrainerClass, model, optimizer, device, writer, cfg.training)
         trainer.fit(train_loader, val_loader, cfg, run_dir)
 
     else:

@@ -1,0 +1,13 @@
+# configs/model/clam_mb.yaml
+# CLAM Multi-Branch (Lu et al., 2021, Nature Biomedical Engineering)
+# https://github.com/mahmoodlab/CLAM
+
+name: clam_mb
+input_dim: 1536       # UNI2 / GigaPath
+hidden_dim: 256
+attn_dim: 128
+n_classes: 2
+dropout: 0.25
+k_sample: 8           # nb de patches top/bottom pour la perte de clustering instance
+subtyping: false      # true en multi-classes (subtyping) pour activer la perte out-of-class
+instance_loss: ce

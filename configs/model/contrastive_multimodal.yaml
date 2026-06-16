@@ -1,0 +1,16 @@
+name: contrastive_multimodal
+
+# Patch embedding dimension (1536 for UNI2 / GigaPath)
+input_dim: 1536
+
+# Internal dimension for GatedAttention branches and MLP fusion
+hidden_dim: 256
+
+# Number of output classes
+n_classes: 2
+
+# Projection head output dimension for contrastive loss
+proj_dim: 128
+
+# Dropout rate inside GatedAttention and classifier
+dropout: 0.25

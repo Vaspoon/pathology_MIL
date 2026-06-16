@@ -79,12 +79,7 @@ class ABMIL(nn.Module):
     ):
         super().__init__()
         self.attention  = GatedAttention(input_dim, hidden_dim, dropout)
-        self.classifier = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim // 2),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim // 2, n_classes),
-        )
+        self.classifier = nn.Linear(hidden_dim, n_classes)
 
     def forward(
         self,

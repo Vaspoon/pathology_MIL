@@ -2,3 +2,6 @@ batch_size: 1
 lr: 1e-4
 epochs: 50
 device: cuda
+early_stopping: true
+early_stopping_patience: 10
+monitor: val_loss

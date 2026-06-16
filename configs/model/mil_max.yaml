@@ -4,3 +4,4 @@
 name: mil_max
 input_dim: 1536
 hidden_dim: 256
+n_classes: 2
