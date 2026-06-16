@@ -10,16 +10,11 @@ cross-validation (utilisés par train_cv.py) :
     train_one_fold        : entraîne un modèle pour un fold (avec/sans early stopping)
 """
 
-import copy
 import random
 
 import numpy as np
 import torch
 from sklearn.model_selection import LeaveOneOut, StratifiedKFold
-from tqdm import trange
-
-from training.trainer import EarlyStopping
-from utils.build import ABMIL_FAMILY
 
 
 def set_seed(seed: int) -> None:
@@ -97,50 +92,9 @@ def train_one_fold(trainer, TrainerClass, train_loader, val_loader, cfg, run_dir
     """
     Entraîne `trainer` pour un fold/seed donné.
 
-    - Pour les trainers de la famille ABMIL (TrainerABMIL, TrainerCLAM,
-      TrainerMultiModalABMIL, TrainerContrastiveMultiModalABMIL) : utilise
-      fit() avec early stopping paramétrable (cfg.training.early_stopping)
-      et sans écriture de checkpoints (cfg.cv.save_checkpoints).
-    - Pour le Trainer basique (mil_max / mil_mean) : boucle manuelle avec
-      early stopping optionnel sur val_loss.
-
-    `desc` est affiché sur la barre de progression tqdm des epochs (identifie
-    le fold/seed en cours).
+    Tous les trainers exposent désormais fit() avec la même interface
+    (early stopping, best_state_dict, best_epoch, best_metric, monitor, mode).
     """
-    if issubclass(TrainerClass, ABMIL_FAMILY):
-        save_checkpoints = bool(cfg.cv.get("save_checkpoints", False))
-        return trainer.fit(train_loader, val_loader, cfg, run_dir, save_checkpoints=save_checkpoints, desc=desc)
-
-    # Basic Trainer (mil_max / mil_mean) — boucle manuelle
-    early_stopping = bool(cfg.training.get("early_stopping", True))
-    patience        = int(cfg.training.get("early_stopping_patience", 10))
-    early_stopper   = EarlyStopping(patience=patience, mode="min") if early_stopping else None
-
-    # Attributs ajoutés dynamiquement pour exposer une interface uniforme avec
-    # TrainerABMIL.fit() (utilisée par train_cv.py pour sauvegarder le meilleur
-    # modèle par seed, peu importe la classe de trainer).
-    trainer.monitor          = "val_loss"
-    trainer.mode             = "min"
-    trainer.best_metric      = float("inf")
-    trainer.best_epoch       = None
-    trainer.best_state_dict  = None
-
-    history = {"train_loss": [], "val_loss": []}
-    pbar = trange(cfg.training.epochs, desc=desc, leave=False)
-    for epoch in pbar:
-        train_loss = trainer.train_epoch(train_loader, epoch)
-        val_loss   = trainer.eval_epoch(val_loader, epoch)
-        history["train_loss"].append(train_loss)
-        history["val_loss"].append(val_loss)
-
-        pbar.set_postfix(train_loss=f"{train_loss:.4f}", val_loss=f"{val_loss:.4f}")
-
-        if val_loss < trainer.best_metric:
-            trainer.best_metric     = val_loss
-            trainer.best_epoch      = epoch
-            trainer.best_state_dict = copy.deepcopy(trainer.model.state_dict())
-
-        if early_stopper is not None and early_stopper.step(val_loss):
-            break
-
-    return history
+    save_checkpoints = bool(cfg.cv.get("save_checkpoints", False))
+    return trainer.fit(train_loader, val_loader, cfg, run_dir,
+                       save_checkpoints=save_checkpoints, desc=desc)

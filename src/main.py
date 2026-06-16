@@ -6,12 +6,8 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from tqdm import trange
 
 from datasets.her2_datasets import H5Dataset, DatasetMultiModal
-from training.trainer import TrainerABMIL, TrainerMultiModalABMIL
-from training.trainer_clam import TrainerCLAM
-from training.trainer_contrastive import TrainerContrastiveMultiModalABMIL
 from training.cv_utils import set_seed
 from utils.build import build_model as _build_model, build_trainer as _build_trainer
 
@@ -57,25 +53,8 @@ def main(cfg: DictConfig):
 
     # ── Training ─────────────────────────────────────────────────────────────
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.training.lr)
-
-    if TrainerClass in (TrainerABMIL, TrainerCLAM, TrainerMultiModalABMIL, TrainerContrastiveMultiModalABMIL):
-        trainer = _build_trainer(TrainerClass, model, optimizer, device, writer, cfg.training)
-        trainer.fit(train_loader, val_loader, cfg, run_dir)
-
-    else:
-        # Basic trainer (mil_max / mil_mean) — preserves original manual loop
-        trainer = TrainerClass(model, optimizer, device, writer)
-        for epoch in trange(cfg.training.epochs, desc="Training Epochs"):
-            train_loss = trainer.train_epoch(train_loader, epoch)
-            val_loss   = trainer.eval_epoch(val_loader, epoch)
-            print(f"Epoch {epoch} | Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
-            if (epoch + 1) % cfg.training.save_every == 0:
-                ckpt = os.path.join(run_dir, f"model_epoch_{epoch+1}.pt")
-                torch.save(model.state_dict(), ckpt)
-                print(f"Saved checkpoint: {ckpt}")
-        final = os.path.join(run_dir, f"model_final_{cfg.training.batch_size}_{cfg.training.lr}.pt")
-        torch.save(model, final)
-        print(f"Saved final model: {final}")
+    trainer   = _build_trainer(TrainerClass, model, optimizer, device, writer, cfg.training)
+    trainer.fit(train_loader, val_loader, cfg, run_dir)
 
     writer.close()
 

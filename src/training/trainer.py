@@ -14,7 +14,7 @@ from tqdm import trange
 
 
 class Trainer:
-    """Trainer original — inchangé."""
+    """Trainer pour mil_max / mil_mean (pooling simple, cross-entropy)."""
 
     def __init__(self, model, optimizer, device, writer=None):
         self.model     = model
@@ -63,6 +63,62 @@ class Trainer:
         if self.writer:
             self.writer.add_scalar("val/loss", avg_loss, epoch)
         return avg_loss
+
+    def fit(self, train_loader, val_loader, cfg, run_dir: str,
+            save_checkpoints: bool = True, desc: str = "epochs") -> dict:
+        """
+        Boucle d'entraînement avec early stopping et checkpointing optionnel.
+        Interface identique à TrainerABMIL.fit() pour permettre un appel uniforme.
+        """
+        early_stopping = bool(cfg.training.get("early_stopping", True))
+        patience       = int(cfg.training.get("early_stopping_patience", 10))
+        early_stopper  = EarlyStopping(patience=patience, mode="min") if early_stopping else None
+
+        self.monitor        = "val_loss"
+        self.mode           = "min"
+        self.best_metric    = float("inf")
+        self.best_epoch     = None
+        self.best_state_dict = None
+
+        history = {"train_loss": [], "val_loss": []}
+        pbar = trange(cfg.training.epochs, desc=desc, leave=False)
+        for epoch in pbar:
+            train_loss = self.train_epoch(train_loader, epoch)
+            val_loss   = self.eval_epoch(val_loader, epoch)
+            history["train_loss"].append(train_loss)
+            history["val_loss"].append(val_loss)
+
+            pbar.set_postfix(train_loss=f"{train_loss:.4f}", val_loss=f"{val_loss:.4f}")
+
+            if val_loss < self.best_metric:
+                self.best_metric     = val_loss
+                self.best_epoch      = epoch
+                self.best_state_dict = copy.deepcopy(self.model.state_dict())
+                if save_checkpoints:
+                    os.makedirs(run_dir, exist_ok=True)
+                    path = os.path.join(run_dir, "best.pt")
+                    torch.save({"epoch": epoch, "model_state_dict": self.model.state_dict(),
+                                "val_loss": val_loss}, path)
+                    pbar.write(f"  Best model saved -> {path}  (val_loss={val_loss:.4f})")
+
+            if save_checkpoints and (epoch + 1) % cfg.training.get("save_every", 5) == 0:
+                os.makedirs(run_dir, exist_ok=True)
+                torch.save({"epoch": epoch, "model_state_dict": self.model.state_dict()},
+                           os.path.join(run_dir, f"epoch_{epoch+1}.pt"))
+
+            if early_stopper is not None and early_stopper.step(val_loss):
+                pbar.write(
+                    f"Early stopping déclenché à l'epoch {epoch} "
+                    f"(patience={patience}, best val_loss={early_stopper.best:.4f})"
+                )
+                break
+
+        if save_checkpoints:
+            os.makedirs(run_dir, exist_ok=True)
+            torch.save({"epoch": epoch, "model_state_dict": self.model.state_dict()},
+                       os.path.join(run_dir, "last.pt"))
+
+        return history
 
 
 class TrainerMultiModal:
