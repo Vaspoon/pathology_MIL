@@ -2,6 +2,7 @@ batch_size: 1
 lr: 1e-4
 epochs: 50
 device: cuda
+seed: 42                       # graine pour la reproductibilité (null = pas de seed fixée)
 early_stopping: true
 early_stopping_patience: 10
 monitor: val_loss

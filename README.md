@@ -122,5 +122,7 @@ python src/train_cv.py model=clam_sb    cv.method=kfold cv.k=4 cv.n_seeds=6
 # 2. Ouvrir les notebooks correspondants pour l'évaluation et les comparaisons
 jupyter notebook notebooks/eval_cv_abmil.ipynb
 
-# 3. Après avoir comparé les architectures, ré entrainer la meilleure architetcure avec le set de validation et train complets sur une seed différente. Ce sera ce modèle qui sera utilisé pour les benchmarks
+# 3. Après avoir comparé les architectures, ré entrainer la meilleure architetcure avec le set de validation et train complets sur une seed différente (42). Ce sera ce modèle qui sera utilisé pour les benchmarks
+
+python src/train_cv.py model=abmil   
 ```

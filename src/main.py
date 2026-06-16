@@ -12,6 +12,7 @@ from datasets.her2_datasets import H5Dataset, DatasetMultiModal
 from training.trainer import TrainerABMIL, TrainerMultiModalABMIL
 from training.trainer_clam import TrainerCLAM
 from training.trainer_contrastive import TrainerContrastiveMultiModalABMIL
+from training.cv_utils import set_seed
 from utils.build import build_model as _build_model, build_trainer as _build_trainer
 
 # ---------------------------------------------------------------------------
@@ -20,6 +21,10 @@ from utils.build import build_model as _build_model, build_trainer as _build_tra
 def main(cfg: DictConfig):
 
     print(OmegaConf.to_yaml(cfg))
+
+    seed = cfg.training.get("seed", None)
+    if seed is not None:
+        set_seed(int(seed))
 
     device  = torch.device(cfg.training.device)
     run_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
