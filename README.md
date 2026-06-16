@@ -1,6 +1,33 @@
 # pathology_MIL
 Personal Repository to test multiple instance learning models on pathology slides images
 
+## Installation
+
+```bash
+# 1. Cloner le repo
+git clone <url>
+cd pathology_MIL
+
+# 2. Créer un environnement virtuel
+python -m venv venv
+source venv/bin/activate        # Linux / macOS
+# venv\Scripts\activate         # Windows
+
+# 3. Installer PyTorch (selon ta version de CUDA — voir https://pytorch.org)
+# CUDA 12.8 :
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+# CPU uniquement :
+# pip install torch torchvision torchaudio
+
+# 4. Installer les autres dépendances
+pip install -r requirements.txt
+
+# 5. Installer le package en mode éditable (permet d'importer src/ sans manipuler PYTHONPATH)
+pip install -e .
+```
+
+> **Python** : 3.9+ recommandé (testé avec 3.10).
+
 ## Modèles disponibles
 
 Tous les modèles sont déclarés dans le registre [`src/utils/build.py`](src/utils/build.py) (`MODEL_REGISTRY`) et configurés via [`configs/model/`](configs/model). Sélection avec `model=<name>`.
