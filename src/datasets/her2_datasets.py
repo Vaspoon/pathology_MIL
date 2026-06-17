@@ -28,6 +28,7 @@ class H5Dataset(Dataset):
         self.df = self._filter_existing(dataframe)
 
     def _find_path(self, slide_id):
+        slide_id = str(slide_id).zfill(2)
         for d in self.embeddings_dirs:
             p = Path(d, f"{slide_id}.h5")
             if p.exists():
@@ -86,7 +87,7 @@ class WSIDatasetWithCoords(Dataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        slide_id = str(row.slide_id)
+        slide_id = str(row.slide_id).zfill(2)
 
         with h5py.File(f"{self.embeddings_dir}/{slide_id}.h5", "r") as f:
             # Features
@@ -144,6 +145,7 @@ class DatasetMultiModal(Dataset):
 
     @staticmethod
     def _find_path(dirs, file_id):
+        file_id = str(file_id).zfill(2)
         for d in dirs:
             p = Path(d, f"{file_id}.h5")
             if p.exists():
