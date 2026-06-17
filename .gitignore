@@ -17,3 +17,5 @@ multirun/
 outputs/
 data/HER2MATCH_224_UNI2_embeds
 *.pyc
+data/splits_heki67/
+data/HEHI67_224_embeddings
