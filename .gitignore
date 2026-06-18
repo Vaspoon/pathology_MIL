@@ -1,14 +1,17 @@
 venv/
 data/CHU_UNI2_embeds/
 data/CHU_UNI2_embeds_balanced/
+data/CHU_UNI2_embeds_unbalanced/
 data/IHC4BC_224_embeds/
 data/IHC4BC_224_embeddings/
 data/IHC
 data/splits_ihc4bc/her2/
 data/splits_ihc4bc/Labels/
+data/splits_chu_unbalanced/
 notebooks/eval_outputs/
 notebooks/eval_outputs_multimodal/
 notebooks/figures/
+notebooks/MIL_HES_CHU_BALANCED/
 data/HER2MATCH_GIGAPATH_embeds/
 data/splits/
 src/outputs/

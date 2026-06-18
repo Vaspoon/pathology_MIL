@@ -1,9 +1,9 @@
 defaults:
   - _self_
-  - model: clam_sb                  # mil_max | mil_mean | attention_mil | abmil | transmil | clam_sb | clam_mb | multimodal_gated | multimodal_porpoise
+  - model: mil_max                  # mil_max | mil_mean | attention_mil | abmil | transmil | clam_sb | clam_mb | multimodal_gated | multimodal_porpoise
 
 experiment:
-  name: ihc_clam_sb_chu_balanced
+  name: he_mil_max_chu_wce
 
 data:
   train_csv:              data/splits_chu_balanced/train.csv
@@ -49,7 +49,7 @@ cv:
   # seeds: [42]  # si fourni, remplace n_seeds/seed_start
   save_checkpoints: false   # sauvegarder les .pt de chaque fold (volumineux pour LOO)
   save_best_per_seed: true  # sauvegarder un seul modèle (le meilleur, toutes folds confondues) par seed
-  results_dir: outputs/cv_results_ihc_monomodal # chemin stable lu par les notebooks d'évaluation
+  results_dir: outputs/cv_results_he_chu_wce # chemin stable lu par les notebooks d'évaluation
 
 heatmap:
   patch_size: 256
