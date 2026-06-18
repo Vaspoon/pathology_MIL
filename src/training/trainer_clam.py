@@ -18,7 +18,6 @@ Hérite de TrainerABMIL pour l'early stopping, le checkpointing et fit().
 """
 
 import torch
-import torch.nn.functional as F
 
 from training.trainer import TrainerABMIL
 
@@ -30,6 +29,7 @@ class TrainerCLAM(TrainerABMIL):
     Args additionnels par rapport à TrainerABMIL :
         bag_weight : poids de la bag-loss dans la loss totale
                      (1 - bag_weight) est appliqué à la instance-loss.
+        loss / focal_gamma / focal_alpha / class_weights : voir TrainerABMIL.
     """
 
     def __init__(
@@ -42,8 +42,21 @@ class TrainerCLAM(TrainerABMIL):
         monitor:                 str   = "val_loss",
         early_stopping:          bool  = True,
         bag_weight:              float = 0.7,
+        loss:                    str   = "cross_entropy",
+        class_weights                  = None,
+        focal_gamma:             float = 2.0,
+        focal_alpha                    = None,
     ):
-        super().__init__(model, optimizer, device, writer, early_stopping_patience, monitor, early_stopping)
+        super().__init__(
+            model, optimizer, device, writer,
+            early_stopping_patience=early_stopping_patience,
+            monitor=monitor,
+            early_stopping=early_stopping,
+            class_weights=class_weights,
+            loss=loss,
+            focal_gamma=focal_gamma,
+            focal_alpha=focal_alpha,
+        )
         self.bag_weight = bag_weight
 
     def train_epoch(self, loader, epoch: int) -> float:
@@ -58,7 +71,7 @@ class TrainerCLAM(TrainerABMIL):
 
             logits, _, instance_loss = self.model(hes, label=y, instance_eval=True)
 
-            bag_loss = F.cross_entropy(logits.unsqueeze(0), y.long().unsqueeze(0))
+            bag_loss = self.criterion(logits.unsqueeze(0), y.long().unsqueeze(0))
             loss = self.bag_weight * bag_loss + (1 - self.bag_weight) * instance_loss
 
             loss.backward()
@@ -91,7 +104,7 @@ class TrainerCLAM(TrainerABMIL):
 
             logits, _, _ = self.model(hes)
 
-            loss  = F.cross_entropy(logits.unsqueeze(0), y.long().unsqueeze(0))
+            loss  = self.criterion(logits.unsqueeze(0), y.long().unsqueeze(0))
             probs = torch.softmax(logits, dim=-1)[1].item()
 
             total_loss += loss.item()

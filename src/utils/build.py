@@ -69,7 +69,8 @@ def build_trainer(TrainerClass, model, optimizer, device, writer, cfg_training):
     for key in (
         "early_stopping", "early_stopping_patience", "monitor",
         "lambda_smd", "lambda_con", "contrastive_batch_size",
-        "bag_weight",
+        "bag_weight", "class_weights",
+        "loss", "focal_gamma", "focal_alpha",
     ):
         if key in valid and key in training_cfg:
             kwargs[key] = training_cfg[key]

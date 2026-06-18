@@ -47,12 +47,14 @@ class TrainerContrastiveMultiModalABMIL(TrainerMultiModalABMIL):
         lambda_smd:              float = 1.0,
         lambda_con:              float = 0.1,
         contrastive_batch_size:  int   = 16,
+        class_weights                  = None,
     ):
         super().__init__(
             model, optimizer, device, writer,
             early_stopping_patience=early_stopping_patience,
             monitor=monitor,
             early_stopping=early_stopping,
+            class_weights=class_weights,
         )
         self.lambda_smd             = lambda_smd
         self.lambda_con             = lambda_con
@@ -136,10 +138,10 @@ class TrainerContrastiveMultiModalABMIL(TrainerMultiModalABMIL):
             # ── SMD loss (Eq. 1) ──────────────────────────────────────────────
             y_long   = y.long().unsqueeze(0)
             loss_smd = (
-                F.cross_entropy(logits_full.unsqueeze(0), y_long)
+                self.criterion(logits_full.unsqueeze(0), y_long)
                 + self.lambda_smd * (
-                    F.cross_entropy(logits_he.unsqueeze(0),  y_long)
-                    + F.cross_entropy(logits_ihc.unsqueeze(0), y_long)
+                    self.criterion(logits_he.unsqueeze(0),  y_long)
+                    + self.criterion(logits_ihc.unsqueeze(0), y_long)
                 )
             )
 

@@ -9,18 +9,32 @@ TrainerABMIL : metrics AUC, early stopping, sauvegarde best checkpoint.
 import copy
 import os
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import trange
 
+from training.losses import build_criterion
+
 
 class Trainer:
-    """Trainer pour mil_max / mil_mean (pooling simple, cross-entropy)."""
+    """Trainer pour mil_max / mil_mean (pooling simple, cross-entropy ou focal loss)."""
 
-    def __init__(self, model, optimizer, device, writer=None):
+    def __init__(
+        self,
+        model,
+        optimizer,
+        device,
+        writer=None,
+        loss:          str   = "cross_entropy",   # "cross_entropy" | "focal"
+        class_weights        = None,              # list[float] | None
+        focal_gamma:   float = 2.0,
+        focal_alpha          = None,              # list[float] | None
+    ):
         self.model     = model
         self.optimizer = optimizer
         self.device    = device
         self.writer    = writer
+        self.criterion = build_criterion(loss, class_weights, focal_gamma, focal_alpha, device)
 
     def train_epoch(self, loader, epoch):
         self.model.train()
@@ -32,7 +46,7 @@ class Trainer:
 
             self.optimizer.zero_grad()
             logits = self.model(hes)  # [n_classes]
-            loss = F.cross_entropy(logits.unsqueeze(0), y.long().unsqueeze(0))
+            loss = self.criterion(logits.unsqueeze(0), y.long().unsqueeze(0))
             loss.backward()
             self.optimizer.step()
 
@@ -56,7 +70,7 @@ class Trainer:
                 hes    = hes[0].to(self.device)
                 y      = y.to(self.device).squeeze(0)
                 logits = self.model(hes)  # [n_classes]
-                loss   = F.cross_entropy(logits.unsqueeze(0), y.long().unsqueeze(0))
+                loss   = self.criterion(logits.unsqueeze(0), y.long().unsqueeze(0))
                 total_loss += loss.item()
 
         avg_loss = total_loss / len(loader)
@@ -229,6 +243,10 @@ class TrainerABMIL:
         early_stopping_patience: int  = 10,
         monitor:                 str  = "val_loss",   # "val_loss" | "val_auc"
         early_stopping:          bool = True,         # désactive l'early stopping si False
+        class_weights                 = None,         # list[float] | None — poids par classe (cross_entropy)
+        loss:                    str  = "cross_entropy",  # "cross_entropy" | "focal"
+        focal_gamma:             float = 2.0,
+        focal_alpha                   = None,         # list[float] | None — alpha par classe (focal)
     ):
         self.model     = model
         self.optimizer = optimizer
@@ -244,6 +262,8 @@ class TrainerABMIL:
         self.mode           = mode
         self.best_state_dict = None
         self.best_epoch      = None
+
+        self.criterion = build_criterion(loss, class_weights, focal_gamma, focal_alpha, device)
 
     def _is_better(self, metric: float) -> bool:
         if self.mode == "min":
@@ -265,7 +285,7 @@ class TrainerABMIL:
 
             # Gestion binaire (y scalaire) vs multi-classes
             if logits.shape[-1] == 2:
-                loss = F.cross_entropy(logits.unsqueeze(0), y.long().unsqueeze(0))
+                loss = self.criterion(logits.unsqueeze(0), y.long().unsqueeze(0))
             else:
                 loss = F.binary_cross_entropy_with_logits(logits.squeeze(), y)
 
@@ -299,7 +319,7 @@ class TrainerABMIL:
             logits, _ = self.model(hes)
 
             if logits.shape[-1] == 2:
-                loss  = F.cross_entropy(logits.unsqueeze(0), y.long().unsqueeze(0))
+                loss  = self.criterion(logits.unsqueeze(0), y.long().unsqueeze(0))
                 probs = torch.softmax(logits, dim=-1)[1].item()   # prob classe 1
             else:
                 loss  = F.binary_cross_entropy_with_logits(logits.squeeze(), y)
@@ -427,7 +447,7 @@ class TrainerMultiModalABMIL(TrainerABMIL):
             logits, _ = self.model(hes, ihc)
 
             if logits.shape[-1] == 2:
-                loss = F.cross_entropy(logits.unsqueeze(0), y.long().unsqueeze(0))
+                loss = self.criterion(logits.unsqueeze(0), y.long().unsqueeze(0))
             else:
                 loss = F.binary_cross_entropy_with_logits(logits.squeeze(), y)
 
@@ -461,7 +481,7 @@ class TrainerMultiModalABMIL(TrainerABMIL):
             logits, _ = self.model(hes, ihc)
 
             if logits.shape[-1] == 2:
-                loss  = F.cross_entropy(logits.unsqueeze(0), y.long().unsqueeze(0))
+                loss  = self.criterion(logits.unsqueeze(0), y.long().unsqueeze(0))
                 probs = torch.softmax(logits, dim=-1)[1].item()
             else:
                 loss  = F.binary_cross_entropy_with_logits(logits.squeeze(), y)

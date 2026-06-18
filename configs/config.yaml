@@ -1,24 +1,24 @@
 defaults:
   - _self_
-  - model: mil_mean                  # mil_max | mil_mean | attention_mil | abmil | transmil | clam_sb | clam_mb | multimodal_gated | multimodal_porpoise
+  - model: clam_sb                  # mil_max | mil_mean | attention_mil | abmil | transmil | clam_sb | clam_mb | multimodal_gated | multimodal_porpoise
 
 experiment:
-  name: he_mono_mil_mean_chu_balanced
+  name: ihc_clam_sb_chu_balanced
 
 data:
   train_csv:              data/splits_chu_balanced/train.csv
   val_csv:                data/splits_chu_balanced/val.csv
-  embeddings_dir_train:   data/CHU_UNI2_embeds_balanced/HE/train/
-  embeddings_dir_val:     data/CHU_UNI2_embeds_balanced/HE/val/
+  embeddings_dir_train:   data/CHU_UNI2_embeds_balanced/IHC/train/
+  embeddings_dir_val:     data/CHU_UNI2_embeds_balanced/IHC/val/
   # Used when model.name = multimodal_porpoise | multimodal_gated
   embeddings_dir_ihc_train: data/CHU_UNI2_embeds_balanced/IHC/train/
   embeddings_dir_ihc_val:   data/CHU_UNI2_embeds_balanced/IHC/val/
   dataset_key: embeddings
   # Optionnel — utilisé par train_cv.py comme jeu de test indépendant,
   # évalué pour chaque (seed, fold) en plus du fold de validation.
-  test_csv:                 "data/splits_chu/test_he_unbalanced.csv"
-  embeddings_dir_test:      "data/CHU_UNI2_embeds/HE/"
-  embeddings_dir_ihc_test:   "data/CHU_UNI2_embeds/HE/"
+  test_csv:                 "data/splits_chu_balanced/test_he_unbalanced.csv"
+  embeddings_dir_test:      "data/CHU_UNI2_embeds/IHC/"
+  embeddings_dir_ihc_test:   "data/CHU_UNI2_embeds/IHC/"
 
 training:
   batch_size: 1
@@ -26,10 +26,19 @@ training:
   epochs: 25
   device: cuda
   save_every: 5
-  early_stopping: false               # active/désactive l'early stopping (TrainerABMIL et famille)
-  early_stopping_patience: 10        # utilisé par TrainerABMIL uniquement
+  early_stopping: true               # active/désactive l'early stopping 
+  early_stopping_patience: 7       
   monitor: val_loss                  # "val_loss" | "val_auc"
   bag_weight: 0.7                    # utilisé par TrainerCLAM (clam_sb / clam_mb) uniquement
+  class_weights: [2.367, 0.634]      # list[float] | null — poids par classe pour la weighted cross-entropy
+                                     # ex: [1.0, 3.0] — ignoré si loss: focal
+
+  loss: cross_entropy                # "cross_entropy" | "focal"
+                                     # focal = Focal Loss (Lin et al., ICCV 2017)
+                                     # utilisé par Trainer, TrainerABMIL, TrainerCLAM (monomodal)
+  focal_gamma: 2.0                   # paramètre gamma de la focal loss (ignoré si loss: cross_entropy)
+  focal_alpha: [0.789, 0.211]                  # list[float] | null — alpha par classe (ignoré si loss: cross_entropy)
+                                     # ex: [0.25, 0.75] comme dans le papier original
 
 # Utilisé par train_cv.py (cross-validation multi-seeds)
 cv:
@@ -37,10 +46,10 @@ cv:
   k: 4                  # nombre de folds (ignoré si method == "loo")
   n_seeds: 6            # nombre de seeds testées
   seed_start: 0         # première seed (seeds = seed_start .. seed_start + n_seeds - 1)
-  # seeds: [0, 1, 2, 3, 4]  # si fourni, remplace n_seeds/seed_start
+  # seeds: [42]  # si fourni, remplace n_seeds/seed_start
   save_checkpoints: false   # sauvegarder les .pt de chaque fold (volumineux pour LOO)
   save_best_per_seed: true  # sauvegarder un seul modèle (le meilleur, toutes folds confondues) par seed
-  results_dir: outputs/cv_results   # chemin stable lu par les notebooks d'évaluation
+  results_dir: outputs/cv_results_ihc_monomodal # chemin stable lu par les notebooks d'évaluation
 
 heatmap:
   patch_size: 256
