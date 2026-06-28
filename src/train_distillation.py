@@ -39,12 +39,16 @@ from models.abmil import ABMIL
 from models.attention_mil import AttentionMIL_Papagoras
 from models.transmil import TransMIL
 from models.clam import CLAM_SB
+from models.mil_mean_pooling import MILMeanPooling
+from models.mil_max_pooling import MILMaxPooling
 
 STUDENT_REGISTRY = {
     "abmil":         ABMIL,
     "attention_mil": AttentionMIL_Papagoras,
     "transmil":      TransMIL,
     "clam_sb":       CLAM_SB,
+    "mil_mean":      MILMeanPooling,
+    "mil_max":       MILMaxPooling,
 }
 
 
@@ -58,6 +62,9 @@ def parse_args():
                    help="Temperature for soft logits")
     p.add_argument("--feature_weight", type=float, default=1.0,
                    help="Weight of feature loss relative to logit loss (both mode)")
+    p.add_argument("--mode", type=str, nargs="+", default=["logits", "features", "both"],
+                   choices=["logits", "features", "both"],
+                   help="Distillation mode(s) to run")
     p.add_argument("--seeds", type=int, nargs="+", default=list(range(10)))
     p.add_argument("--k_folds", type=int, default=4)
     p.add_argument("--epochs", type=int, default=30)
@@ -70,7 +77,7 @@ def parse_args():
                    help="Weights for weighted cross-entropy loss")
     p.add_argument("--device", type=str, default="cuda")
     p.add_argument("--teacher_path", type=str,
-                   default="D:/pathology_MIL/teacher/chu_multimodal_propoise_teacher.pt")
+                   default=str(Path(__file__).resolve().parent.parent / "teacher/chu_multimodal_propoise_teacher.pt"))
     p.add_argument("--output_dir", type=str, default="outputs/distillation")
     return p.parse_args()
 
@@ -126,8 +133,16 @@ def get_student_bag_embedding(student, student_name, hes):
         A = torch.softmax(student.attention(H), dim=0)
         return torch.sum(A * H, dim=0, keepdim=True)
     elif student_name == "clam_sb":
-        _, z = student.attention(hes)
-        return z
+        h = student.fc(hes)
+        A = torch.transpose(student.attention_net(h), 1, 0)
+        A = torch.softmax(A, dim=1)
+        return torch.mm(A, h)
+    elif student_name == "mil_mean":
+        h = student.encoder(hes)
+        return h.mean(dim=0, keepdim=True)
+    elif student_name == "mil_max":
+        h = student.encoder(hes)
+        return h.max(dim=0, keepdim=True).values
     return None  # TransMIL: no clean bag embedding
 
 
@@ -270,7 +285,7 @@ def main():
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
     args.device = device
 
-    base = Path("D:/pathology_MIL")
+    base = Path(__file__).resolve().parent.parent
     train_csv = pd.read_csv(base / "data/splits_chu_unbalanced/train.csv")
     val_csv = pd.read_csv(base / "data/splits_chu_unbalanced/val.csv")
     test_csv = pd.read_csv(base / "data/splits_chu_unbalanced/test.csv")
@@ -298,7 +313,7 @@ def main():
     out_dir = Path(args.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    modes = ["logits", "features", "both"]
+    modes = args.mode
     all_metrics = {}
 
     for mode in modes:
