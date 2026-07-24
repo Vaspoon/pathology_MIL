@@ -58,6 +58,8 @@ cv:
 # loss,class_weights,focal_gamma,focal_alpha,device} — pas dupliqués ici.
 distillation:
   teacher_path: outputs/cv_results_her2contest_teachers/multimodal_porpoise/seed42_best.pt
+  teacher_hidden_dim: 256  # hidden_dim du teacher au moment de son entraînement (indépendant
+                           # du hidden_dim du student défini par le groupe `model` — ex. TransMIL=512)
   alpha: 0.5            # poids de la distill loss vs hard label loss
   temperature: 4.0       # température des soft logits (mode logits/both)
   feature_weight: 1.0    # poids de la feature loss relative à la logit loss (mode both)

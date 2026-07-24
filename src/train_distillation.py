@@ -112,11 +112,14 @@ def get_student_bag_embedding(student, student_name, hes):
 
 def train_one_fold(teacher, student, student_name, train_loader, val_loader,
                     test_loader, mode, seed, fold, *, device, epochs, lr, patience,
-                    hidden_dim, alpha, temperature, feature_weight, ce_criterion):
+                    hidden_dim, teacher_hidden_dim, alpha, temperature, feature_weight,
+                    ce_criterion):
     params = list(student.parameters())
     feature_proj = None
     if mode in ("features", "both"):
-        feature_proj = nn.Linear(hidden_dim, hidden_dim).to(device)
+        # projects the student's own bag-embedding dim -> the teacher's bag-embedding
+        # dim (they can differ, e.g. TransMIL hidden_dim=512 vs teacher hidden_dim=256)
+        feature_proj = nn.Linear(hidden_dim, teacher_hidden_dim).to(device)
         params = params + list(feature_proj.parameters())
 
     optimizer = torch.optim.Adam(params, lr=lr)
@@ -266,9 +269,10 @@ def main(cfg: DictConfig):
     dcfg = cfg.distillation
     hidden_dim = cfg.model.hidden_dim
     input_dim  = cfg.model.input_dim
+    teacher_hidden_dim = int(dcfg.get("teacher_hidden_dim", 256))
 
     print(f"Loading teacher from {dcfg.teacher_path}")
-    teacher = load_teacher(dcfg.teacher_path, device, input_dim, hidden_dim)
+    teacher = load_teacher(dcfg.teacher_path, device, input_dim, teacher_hidden_dim)
     print("  Teacher loaded and frozen.")
 
     out_dir = Path(dcfg.output_dir)
@@ -320,6 +324,7 @@ def main(cfg: DictConfig):
                     mode, seed, fold,
                     device=device, epochs=cfg.training.epochs, lr=cfg.training.lr,
                     patience=cfg.training.early_stopping_patience, hidden_dim=hidden_dim,
+                    teacher_hidden_dim=teacher_hidden_dim,
                     alpha=dcfg.alpha, temperature=dcfg.temperature,
                     feature_weight=dcfg.feature_weight, ce_criterion=ce_criterion,
                 )
