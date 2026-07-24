@@ -1,88 +1,68 @@
 """
-train_distillation.py — Knowledge Distillation from multimodal PORPOISE to unimodal student.
+train_distillation.py — Knowledge Distillation from multimodal teacher to unimodal student.
 
-The teacher (PORPOISE, HE+IHC) is frozen. The student (any unimodal arch) learns
-from HE-only inputs, supervised by a mix of:
-    - Hard label loss   : standard cross-entropy on ground truth
+The teacher (multimodal PORPOISE, HE+IHC) is frozen. The student (any unimodal
+architecture from the `model` config group) learns from HE-only inputs,
+supervised by a mix of:
+    - Hard label loss   : cross-entropy / focal loss on ground truth (cfg.training.loss)
     - Soft logit loss   : KL divergence on teacher soft logits (Hinton et al., 2015)
     - Feature loss      : MSE between student and teacher fused bag embedding (z_fused)
 
-Runs all 3 distillation modes (logits, features, both) in a single execution.
+Runs all requested distillation modes (logits, features, both) in a single execution.
+
+Driven by Hydra like train_cv.py: data paths, seeds/folds and training hyperparameters
+are read from configs/config.yaml (cfg.data / cfg.cv / cfg.training). The student
+architecture is picked via the `model` config group. Distillation-specific
+hyperparameters live under cfg.distillation.
 
 Usage:
-    python src/train_distillation.py --student abmil
-    python src/train_distillation.py --student abmil --seeds 0 1 2 --epochs 10
-    python src/train_distillation.py --student attention_mil --alpha 0.7 --temperature 3.0
+    python src/train_distillation.py                                  # student = current `model` default (config.yaml)
+    python src/train_distillation.py model=attention_mil
+    python src/train_distillation.py model=abmil distillation.alpha=0.7 distillation.temperature=3.0
+    python src/train_distillation.py model=abmil distillation.mode=[logits]
+    # multirun over several student architectures:
+    python src/train_distillation.py -m model=abmil,mil_mean,mil_max,clam_sb
+    # point to a teacher trained on a different dataset (e.g. her2contest):
+    python src/train_distillation.py distillation.teacher_path=outputs/cv_results_her2contest_he/multimodal_porpoise/seed0_best.pt
 """
 
-import argparse
 import copy
 import os
 import sys
 
+import hydra
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from omegaconf import DictConfig, OmegaConf
 from pathlib import Path
 from sklearn.metrics import roc_auc_score, accuracy_score, f1_score, matthews_corrcoef
 from sklearn.model_selection import StratifiedKFold
 from torch.utils.data import DataLoader
-from tqdm import trange
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
-from datasets.her2_datasets import H5Dataset, DatasetMultiModal
+from datasets.her2_datasets import DatasetMultiModal
 from models.multimodal_porpoise import MultiModalMILPorpoise
-from models.abmil import ABMIL
-from models.attention_mil import AttentionMIL_Papagoras
-from models.transmil import TransMIL
-from models.clam import CLAM_SB
-from models.mil_mean_pooling import MILMeanPooling
-from models.mil_max_pooling import MILMaxPooling
+from training.losses import build_criterion
+from utils.build import MODEL_REGISTRY, build_model
 
-STUDENT_REGISTRY = {
-    "abmil":         ABMIL,
-    "attention_mil": AttentionMIL_Papagoras,
-    "transmil":      TransMIL,
-    "clam_sb":       CLAM_SB,
-    "mil_mean":      MILMeanPooling,
-    "mil_max":       MILMaxPooling,
-}
+# Only unimodal architectures (forward(hes)) can be distillation students.
+STUDENT_REGISTRY = {k: v for k, v in MODEL_REGISTRY.items() if not v["multimodal"]}
 
 
-def parse_args():
-    p = argparse.ArgumentParser()
-    p.add_argument("--student", type=str, default="abmil",
-                   choices=list(STUDENT_REGISTRY.keys()))
-    p.add_argument("--alpha", type=float, default=0.5,
-                   help="Weight of distillation loss vs hard label loss")
-    p.add_argument("--temperature", type=float, default=4.0,
-                   help="Temperature for soft logits")
-    p.add_argument("--feature_weight", type=float, default=1.0,
-                   help="Weight of feature loss relative to logit loss (both mode)")
-    p.add_argument("--mode", type=str, nargs="+", default=["logits", "features", "both"],
-                   choices=["logits", "features", "both"],
-                   help="Distillation mode(s) to run")
-    p.add_argument("--seeds", type=int, nargs="+", default=list(range(10)))
-    p.add_argument("--k_folds", type=int, default=4)
-    p.add_argument("--epochs", type=int, default=30)
-    p.add_argument("--lr", type=float, default=1e-4)
-    p.add_argument("--patience", type=int, default=7)
-    p.add_argument("--hidden_dim", type=int, default=256)
-    p.add_argument("--input_dim", type=int, default=1536)
-    p.add_argument("--dropout", type=float, default=0.25)
-    p.add_argument("--class_weights", type=float, nargs="+", default=[2.367, 0.634],
-                   help="Weights for weighted cross-entropy loss")
-    p.add_argument("--device", type=str, default="cuda")
-    p.add_argument("--teacher_path", type=str,
-                   default=str(Path(__file__).resolve().parent.parent / "teacher/chu_multimodal_propoise_teacher.pt"))
-    p.add_argument("--output_dir", type=str, default="outputs/distillation")
-    return p.parse_args()
+def _seeds(cfg):
+    """Same convention as train_cv.py: cfg.cv.seeds overrides seed_start/n_seeds."""
+    if "seeds" in cfg.cv and cfg.cv.seeds:
+        return list(cfg.cv.seeds)
+    seed_start = int(cfg.cv.get("seed_start", 0))
+    n_seeds    = int(cfg.cv.get("n_seeds", 1))
+    return list(range(seed_start, seed_start + n_seeds))
 
 
-def load_teacher(teacher_path, device, input_dim=1536, hidden_dim=256):
+def load_teacher(teacher_path, device, input_dim, hidden_dim):
     model = MultiModalMILPorpoise(input_dim=input_dim, hidden_dim=hidden_dim,
                                    n_classes=2, dropout=0.25)
     ckpt = torch.load(teacher_path, map_location=device, weights_only=False)
@@ -94,22 +74,6 @@ def load_teacher(teacher_path, device, input_dim=1536, hidden_dim=256):
     for p in model.parameters():
         p.requires_grad = False
     return model
-
-
-def build_student(name, input_dim, hidden_dim, device, dropout=0.25):
-    cls = STUDENT_REGISTRY[name]
-    if name == "transmil":
-        model = cls(input_dim=input_dim, n_classes=2)
-    elif name == "attention_mil":
-        model = cls(input_dim=input_dim, hidden_dim=hidden_dim, n_classes=2,
-                     dropout_rate=dropout)
-    elif name == "clam_sb":
-        model = cls(input_dim=input_dim, hidden_dim=hidden_dim, n_classes=2,
-                     dropout=dropout)
-    else:
-        model = cls(input_dim=input_dim, hidden_dim=hidden_dim, n_classes=2,
-                     dropout=dropout)
-    return model.to(device)
 
 
 def get_teacher_bag_embedding(teacher, hes, ihc):
@@ -147,27 +111,23 @@ def get_student_bag_embedding(student, student_name, hes):
 
 
 def train_one_fold(teacher, student, student_name, train_loader, val_loader,
-                   test_loader, mode, args, seed, fold):
-    device = args.device
-    weights = torch.tensor(args.class_weights, dtype=torch.float32, device=device)
-    ce_criterion = nn.CrossEntropyLoss(weight=weights)
-
-    feature_proj = None
+                    test_loader, mode, seed, fold, *, device, epochs, lr, patience,
+                    hidden_dim, alpha, temperature, feature_weight, ce_criterion):
     params = list(student.parameters())
+    feature_proj = None
     if mode in ("features", "both"):
-        feature_proj = nn.Linear(args.hidden_dim, args.hidden_dim).to(device)
+        feature_proj = nn.Linear(hidden_dim, hidden_dim).to(device)
         params = params + list(feature_proj.parameters())
 
-    optimizer = torch.optim.Adam(params, lr=args.lr)
+    optimizer = torch.optim.Adam(params, lr=lr)
     best_val_loss = float("inf")
     best_state = None
     patience_counter = 0
 
-    for epoch in range(args.epochs):
+    for epoch in range(epochs):
         student.train()
         if feature_proj:
             feature_proj.train()
-        total_loss = 0.0
 
         for hes, ihc, y in train_loader:
             hes = hes[0].to(device)
@@ -186,7 +146,7 @@ def train_one_fold(teacher, student, student_name, train_loader, val_loader,
             distill_loss = torch.tensor(0.0, device=device)
 
             if mode in ("logits", "both"):
-                T = args.temperature
+                T = temperature
                 student_log_soft = F.log_softmax(student_logits / T, dim=-1)
                 teacher_soft = F.softmax(teacher_logits / T, dim=-1)
                 kl_loss = F.kl_div(student_log_soft, teacher_soft, reduction="batchmean") * (T * T)
@@ -199,14 +159,13 @@ def train_one_fold(teacher, student, student_name, train_loader, val_loader,
                 if student_feat is not None and teacher_feat is not None:
                     projected = feature_proj(student_feat)
                     feat_loss = F.mse_loss(projected, teacher_feat.detach())
-                    weight = args.feature_weight if mode == "both" else 1.0
+                    weight = feature_weight if mode == "both" else 1.0
                     distill_loss = distill_loss + weight * feat_loss
 
-            loss = (1 - args.alpha) * hard_loss + args.alpha * distill_loss
+            loss = (1 - alpha) * hard_loss + alpha * distill_loss
             loss.backward()
             torch.nn.utils.clip_grad_norm_(student.parameters(), max_norm=1.0)
             optimizer.step()
-            total_loss += loss.item()
 
         # Validation
         student.eval()
@@ -226,7 +185,7 @@ def train_one_fold(teacher, student, student_name, train_loader, val_loader,
             patience_counter = 0
         else:
             patience_counter += 1
-            if patience_counter >= args.patience:
+            if patience_counter >= patience:
                 break
 
     if best_state is not None:
@@ -280,53 +239,57 @@ def compute_and_print_metrics(df, seeds, label):
             "mcc": (np.mean(mccs), np.std(mccs))}
 
 
-def main():
-    args = parse_args()
-    device = torch.device(args.device if torch.cuda.is_available() else "cpu")
-    args.device = device
+@hydra.main(config_path="../configs", config_name="config", version_base=None)
+def main(cfg: DictConfig):
+    print(OmegaConf.to_yaml(cfg))
 
-    base = Path(__file__).resolve().parent.parent
-    train_csv = pd.read_csv(base / "data/splits_chu_unbalanced/train.csv")
-    val_csv = pd.read_csv(base / "data/splits_chu_unbalanced/val.csv")
-    test_csv = pd.read_csv(base / "data/splits_chu_unbalanced/test.csv")
-    full_csv = pd.concat([train_csv, val_csv], ignore_index=True)
+    student_name = cfg.model.name
+    if student_name not in STUDENT_REGISTRY:
+        raise ValueError(
+            f"model={student_name} is multimodal, it cannot be a distillation student "
+            f"(needs forward(hes) only). Available students: {list(STUDENT_REGISTRY)}"
+        )
 
-    he_dirs = [
-        str(base / "data/CHU_UNI2_embeds_unbalanced/HE/train"),
-        str(base / "data/CHU_UNI2_embeds_unbalanced/HE/val"),
-        str(base / "data/CHU_UNI2_embeds_unbalanced/HE/test"),
-    ]
-    ihc_dirs = [
-        str(base / "data/CHU_UNI2_embeds_unbalanced/IHC/train"),
-        str(base / "data/CHU_UNI2_embeds_unbalanced/IHC/val"),
-        str(base / "data/CHU_UNI2_embeds_unbalanced/IHC/test"),
-    ]
+    device = torch.device(cfg.training.device if torch.cuda.is_available() else "cpu")
+
+    train_csv = pd.read_csv(cfg.data.train_csv)
+    val_csv   = pd.read_csv(cfg.data.val_csv)
+    test_csv  = pd.read_csv(cfg.data.test_csv)
+    full_csv  = pd.concat([train_csv, val_csv], ignore_index=True)
+
+    he_dirs = [cfg.data.embeddings_dir_train, cfg.data.embeddings_dir_val, cfg.data.embeddings_dir_test]
+    ihc_dirs = [cfg.data.embeddings_dir_ihc_train, cfg.data.embeddings_dir_ihc_val, cfg.data.embeddings_dir_ihc_test]
 
     test_ds = DatasetMultiModal(test_csv, he_dirs, ihc_dirs)
     test_loader = DataLoader(test_ds, batch_size=1, shuffle=False)
 
-    # Load teacher once (same for all seeds)
-    print(f"Loading teacher from {args.teacher_path}")
-    teacher = load_teacher(args.teacher_path, device, args.input_dim, args.hidden_dim)
+    dcfg = cfg.distillation
+    hidden_dim = cfg.model.hidden_dim
+    input_dim  = cfg.model.input_dim
+
+    print(f"Loading teacher from {dcfg.teacher_path}")
+    teacher = load_teacher(dcfg.teacher_path, device, input_dim, hidden_dim)
     print("  Teacher loaded and frozen.")
 
-    out_dir = Path(args.output_dir)
+    out_dir = Path(dcfg.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    modes = args.mode
+    seeds  = _seeds(cfg)
+    k_folds = int(cfg.cv.get("k", 4))
+    modes  = list(dcfg.mode) if not isinstance(dcfg.mode, str) else [dcfg.mode]
     all_metrics = {}
 
     for mode in modes:
         print(f"\n{'#'*70}")
-        print(f"  DISTILLATION MODE: {mode.upper()}")
+        print(f"  DISTILLATION MODE: {mode.upper()}  —  student: {student_name}")
         print(f"{'#'*70}")
 
         all_results = []
 
-        for seed in args.seeds:
+        for seed in seeds:
             print(f"\n  --- Seed {seed} ---")
 
-            skf = StratifiedKFold(n_splits=args.k_folds, shuffle=True, random_state=seed)
+            skf = StratifiedKFold(n_splits=k_folds, shuffle=True, random_state=seed)
             labels = full_csv["label"].values
 
             for fold, (train_idx, val_idx) in enumerate(skf.split(full_csv, labels)):
@@ -343,31 +306,39 @@ def main():
 
                 torch.manual_seed(seed)
                 np.random.seed(seed)
-                student = build_student(args.student, args.input_dim,
-                                         args.hidden_dim, device, args.dropout)
+                student, _, is_multimodal = build_model(cfg.model, device)
+                assert not is_multimodal
+
+                ce_criterion = build_criterion(
+                    cfg.training.loss, cfg.training.class_weights,
+                    cfg.training.focal_gamma, cfg.training.focal_alpha, device,
+                )
 
                 fold_results = train_one_fold(
-                    teacher, student, args.student,
+                    teacher, student, student_name,
                     train_loader, val_loader, test_loader,
-                    mode, args, seed, fold,
+                    mode, seed, fold,
+                    device=device, epochs=cfg.training.epochs, lr=cfg.training.lr,
+                    patience=cfg.training.early_stopping_patience, hidden_dim=hidden_dim,
+                    alpha=dcfg.alpha, temperature=dcfg.temperature,
+                    feature_weight=dcfg.feature_weight, ce_criterion=ce_criterion,
                 )
                 all_results.extend(fold_results)
                 print("done")
 
         df = pd.DataFrame(all_results)
-        df["model"] = f"distill_{args.student}_{mode}"
+        df["model"] = f"distill_{student_name}_{mode}"
 
-        csv_path = out_dir / f"distill_{args.student}_{mode}_predictions.csv"
+        csv_path = out_dir / f"distill_{student_name}_{mode}_predictions.csv"
         df.to_csv(csv_path, index=False)
         print(f"\n  Predictions saved to {csv_path}")
 
-        metrics = compute_and_print_metrics(df, args.seeds,
-                                             f"KD {mode.upper()} — {args.student} from PORPOISE")
+        metrics = compute_and_print_metrics(df, seeds, f"KD {mode.upper()} — {student_name} from teacher")
         all_metrics[mode] = metrics
 
     # Final summary table
     print(f"\n\n{'='*80}")
-    print(f"  SUMMARY: {args.student} — all distillation modes")
+    print(f"  SUMMARY: {student_name} — all distillation modes")
     print(f"{'='*80}")
     fmt = "{:<25} {:>18} {:>18} {:>18} {:>18}"
     print(fmt.format("Mode", "AUC", "Accuracy", "F1", "MCC"))

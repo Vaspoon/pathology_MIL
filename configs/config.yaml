@@ -1,24 +1,24 @@
 defaults:
   - _self_
-  - model: multimodal_gated                # mil_max | mil_mean | attention_mil | abmil | transmil | clam_sb | clam_mb | multimodal_gated | multimodal_porpoise
+  - model: abmil                # mil_max | mil_mean | attention_mil | abmil | transmil | clam_sb | clam_mb | multimodal_gated | multimodal_porpoise
 
 experiment:
-  name: multimodal_gated_chu_wce
+  name: ${model.name}_her2contest
 
 data:
-  train_csv:              data/splits_chu_unbalanced/train.csv
-  val_csv:                data/splits_chu_unbalanced/val.csv
-  embeddings_dir_train:   data/CHU_UNI2_embeds_unbalanced/HE/train/
-  embeddings_dir_val:     data/CHU_UNI2_embeds_unbalanced/HE/val/
+  train_csv:              data/splits_her2contest/train.csv
+  val_csv:                data/splits_her2contest/val.csv
+  embeddings_dir_train:   data/HER2CONTEST_224_embeddings/HE/train/
+  embeddings_dir_val:     data/HER2CONTEST_224_embeddings/HE/val/
   # Used when model.name = multimodal_porpoise | multimodal_gated
-  embeddings_dir_ihc_train: data/CHU_UNI2_embeds_unbalanced/IHC/train/
-  embeddings_dir_ihc_val:   data/CHU_UNI2_embeds_unbalanced/IHC/val/
+  embeddings_dir_ihc_train: data/HER2CONTEST_224_embeddings/IHC/train/
+  embeddings_dir_ihc_val:   data/HER2CONTEST_224_embeddings/IHC/val/
   dataset_key: embeddings
   # Optionnel — utilisé par train_cv.py comme jeu de test indépendant,
   # évalué pour chaque (seed, fold) en plus du fold de validation.
-  test_csv:                 "data/splits_chu_unbalanced/test.csv"
-  embeddings_dir_test:      "data/CHU_UNI2_embeds_unbalanced/HE/test/"
-  embeddings_dir_ihc_test:   "data/CHU_UNI2_embeds_unbalanced/IHC/test/"
+  test_csv:                 "data/splits_her2contest/test.csv"
+  embeddings_dir_test:      "data/HER2CONTEST_224_embeddings/HE/test/"
+  embeddings_dir_ihc_test:   "data/HER2CONTEST_224_embeddings/IHC/test/"
 
 training:
   batch_size: 1
@@ -30,8 +30,9 @@ training:
   early_stopping_patience: 7       
   monitor: val_loss                  # "val_loss" | "val_auc"
   bag_weight: 0.7                    # utilisé par TrainerCLAM (clam_sb / clam_mb) uniquement
-  class_weights: [2.367, 0.634]      # list[float] | null — poids par classe pour la weighted cross-entropy
-                                     # ex: [1.0, 3.0] — ignoré si loss: focal
+  class_weights:  null # NormandIHC[2.367, 0.634]      # list[float] | null — poids par classe pour la cross-entropy
+                                     # ex: [1.0, 3.0] pour repondérer, ou null pour une CE non pondérée
+                                     # (nn.CrossEntropyLoss standard) — ignoré si loss: focal
 
   loss: cross_entropy                # "cross_entropy" | "focal"
                                      # focal = Focal Loss (Lin et al., ICCV 2017)
@@ -49,7 +50,19 @@ cv:
   # seeds: [42]  # si fourni, remplace n_seeds/seed_start
   save_checkpoints: false   # sauvegarder les .pt de chaque fold (volumineux pour LOO)
   save_best_per_seed: true  # sauvegarder un seul modèle (le meilleur, toutes folds confondues) par seed
-  results_dir: outputs/cv_results_chu_wce_complete_seeds # chemin stable lu par les notebooks d'évaluation
+  results_dir: outputs/cv_results_her2contest_teachers # chemin stable lu par les notebooks d'évaluation
+
+# Utilisé par train_distillation.py (KD depuis un teacher multimodal PORPOISE
+# vers le student unimodal HE défini par le groupe `model` ci-dessus).
+# Réutilise cv.{seeds,seed_start,n_seeds,k} et training.{lr,epochs,early_stopping_patience,
+# loss,class_weights,focal_gamma,focal_alpha,device} — pas dupliqués ici.
+distillation:
+  teacher_path: outputs/cv_results_her2contest_teachers/multimodal_porpoise/seed42_best.pt
+  alpha: 0.5            # poids de la distill loss vs hard label loss
+  temperature: 4.0       # température des soft logits (mode logits/both)
+  feature_weight: 1.0    # poids de la feature loss relative à la logit loss (mode both)
+  mode: [logits, features, both]   # mode(s) de distillation à exécuter
+  output_dir: outputs/distillation_her2contest_porpoise
 
 heatmap:
   patch_size: 256
